@@ -51,6 +51,11 @@ const optionsHtml = readFileSync(resolve(rootDir, 'src/options/options.html'), '
 writeFileSync(resolve(distDir, 'options.html'), optionsHtml)
 console.log('✓ Copied options.html')
 
+// Copy options.js
+const optionsJs = readFileSync(resolve(rootDir, 'src/options/options.js'), 'utf-8')
+writeFileSync(resolve(distDir, 'options.js'), optionsJs)
+console.log('✓ Copied options.js')
+
 // Copy icons
 const iconsDir = resolve(distDir, 'icons')
 if (!existsSync(iconsDir)) {
