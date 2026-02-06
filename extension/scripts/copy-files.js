@@ -7,12 +7,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const rootDir = resolve(__dirname, '..')
 const distDir = resolve(rootDir, 'dist')
 
-// Ensure dist exists
 if (!existsSync(distDir)) {
   mkdirSync(distDir, { recursive: true })
 }
 
-// Copy manifest.json
 const manifest = {
   manifest_version: 3,
   name: "Twitter Bookmarks Analyst",
@@ -36,35 +34,35 @@ const manifest = {
   }],
   options_page: "options.html",
   action: {
-    default_title: "Twitter Bookmarks Analyst"
-  }
+    default_title: "Twitter Bookmarks Analyst",
+    default_popup: "popup.html",
+    default_icon: { "16": "icon.svg", "48": "icon.svg", "128": "icon.svg" }
+  },
+  icons: { "16": "icon.svg", "48": "icon.svg", "128": "icon.svg" }
 }
 
-writeFileSync(
-  resolve(distDir, 'manifest.json'),
-  JSON.stringify(manifest, null, 2)
-)
+writeFileSync(resolve(distDir, 'manifest.json'), JSON.stringify(manifest, null, 2))
 console.log('✓ Created manifest.json')
 
-// Copy options.html
 const optionsHtml = readFileSync(resolve(rootDir, 'src/options/options.html'), 'utf-8')
 writeFileSync(resolve(distDir, 'options.html'), optionsHtml)
 console.log('✓ Copied options.html')
 
-// Copy options.js
 const optionsJs = readFileSync(resolve(rootDir, 'src/options/options.js'), 'utf-8')
 writeFileSync(resolve(distDir, 'options.js'), optionsJs)
 console.log('✓ Copied options.js')
 
-// Copy icons
-const iconsDir = resolve(distDir, 'icons')
-if (!existsSync(iconsDir)) {
-  mkdirSync(iconsDir, { recursive: true })
-}
+const popupHtml = readFileSync(resolve(rootDir, 'public/popup.html'), 'utf-8')
+writeFileSync(resolve(distDir, 'popup.html'), popupHtml)
+console.log('✓ Copied popup.html')
+
+const popupJs = readFileSync(resolve(rootDir, 'public/popup.js'), 'utf-8')
+writeFileSync(resolve(distDir, 'popup.js'), popupJs)
+console.log('✓ Copied popup.js')
 
 const iconSrc = resolve(rootDir, 'public/icons/icon.svg')
 if (existsSync(iconSrc)) {
-  copyFileSync(iconSrc, resolve(iconsDir, 'icon.svg'))
+  copyFileSync(iconSrc, resolve(distDir, 'icon.svg'))
   console.log('✓ Copied icon.svg')
 }
 
