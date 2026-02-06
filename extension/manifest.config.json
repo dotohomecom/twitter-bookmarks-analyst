@@ -10,20 +10,21 @@
   "host_permissions": [
     "*://x.com/*",
     "*://twitter.com/*",
-    "http://localhost:3000/*"
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*"
   ],
   "background": {
-    "service_worker": "src/background/index.ts",
+    "service_worker": "background.js",
     "type": "module"
   },
   "content_scripts": [
     {
       "matches": ["*://x.com/*", "*://twitter.com/*"],
-      "js": ["src/content/index.ts"],
+      "js": ["content.js"],
       "run_at": "document_idle"
     }
   ],
-  "options_page": "src/options/options.html",
+  "options_page": "options.html",
   "action": {
     "default_title": "Twitter Bookmarks Analyst"
   }

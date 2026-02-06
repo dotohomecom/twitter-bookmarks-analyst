@@ -1,153 +1,152 @@
 # Twitter Bookmarks Analyst
 
-🔖 A Chrome extension that automatically collects and saves your Twitter/X bookmarks to a local server for analysis and backup.
+🔖 Chrome 扩展，自动采集 Twitter/X 书签并保存到本地服务器。
 
-## Features
+## 功能特性
 
-- **Auto-capture bookmarks**: Monitors your bookmark actions on X.com (Twitter)
-- **Full data extraction**: Captures tweet text, author info, media URLs, and more
-- **Media download**: Automatically downloads images and videos using yt-dlp
-- **Offline queue**: Saves bookmarks locally if server is unavailable, syncs later
-- **Simple dashboard**: View and manage your saved bookmarks
+- **自动捕获书签**: 监控 X.com 的书签操作
+- **完整数据提取**: 采集推文文字、作者信息、媒体 URL
+- **媒体下载**: 自动下载图片和视频 (使用 yt-dlp)
+- **离线队列**: 服务器不可用时本地缓存，稍后自动同步
+- **可视化面板**: Dashboard 查看已保存的书签
 
-## Project Structure
+## 项目结构
 
 ```
 twitter-bookmarks-analyst/
-├── extension/          # Chrome Extension (Manifest V3)
+├── extension/          # Chrome 扩展 (Manifest V3)
 │   ├── src/
 │   │   ├── background/ # Service Worker
-│   │   ├── content/    # Content Scripts (runs on X.com)
-│   │   ├── options/    # Settings page
-│   │   └── types/      # TypeScript types
-│   └── manifest.json
+│   │   ├── content/    # Content Script (运行在 X.com)
+│   │   └── options/    # 设置页面
+│   ├── scripts/        # 构建脚本
+│   └── public/         # 静态资源
 │
-├── server/             # Backend Server (Node.js + Fastify)
+├── server/             # 后端服务 (Node.js + Fastify)
 │   ├── src/
-│   │   ├── api/        # REST API routes
-│   │   ├── db/         # SQLite database
-│   │   ├── queue/      # Media download queue
-│   │   └── services/   # Business logic
-│   └── media/          # Downloaded media files
+│   │   ├── api/        # REST API
+│   │   ├── db/         # SQLite 数据库
+│   │   ├── queue/      # 媒体下载队列
+│   │   └── services/   # 业务逻辑
+│   └── media/          # 下载的媒体文件
 │
-└── docs/               # Documentation
+├── docs/               # 文档
+├── start-server.bat    # Windows 启动脚本
+└── start-server.sh     # Mac/Linux 启动脚本
 ```
 
-## Quick Start
+## 快速开始
 
-### Prerequisites
+### 前置要求
 
 - Node.js 18+
-- pnpm (or npm/yarn)
-- Chrome browser
-- (Optional) Redis for production queue
-- (Optional) yt-dlp for video downloads
+- npm 或 pnpm
+- Chrome 浏览器
+- (可选) yt-dlp - 用于下载视频
 
-### 1. Install Dependencies
+### 1. 启动后端服务
 
+**Windows:**
 ```bash
-# Install extension dependencies
-cd extension
-pnpm install
-
-# Install server dependencies
-cd ../server
-pnpm install
+双击 start-server.bat
 ```
 
-### 2. Start the Server
+**Mac/Linux:**
+```bash
+chmod +x start-server.sh
+./start-server.sh
+```
 
+**或手动启动:**
 ```bash
 cd server
-pnpm dev
+npm install
+npm run dev
 ```
 
-Server runs at `http://localhost:3000`
+服务启动后访问: http://localhost:3000/dashboard
 
-### 3. Load the Extension
+### 2. 构建 Chrome 扩展
 
-1. Open Chrome and go to `chrome://extensions/`
-2. Enable "Developer mode" (top right)
-3. Click "Load unpacked"
-4. Select the `extension` folder
+```bash
+cd extension
+npm install
+npm run build
+```
 
-### 4. Configure the Extension
+### 3. 安装扩展到 Chrome
 
-1. Click the extension icon in Chrome toolbar
-2. Go to Options/Settings
-3. Enter your server URL (default: `http://localhost:3000`)
-4. Enable auto-sync
+1. 打开 Chrome，访问 `chrome://extensions/`
+2. 开启右上角「开发者模式」
+3. 点击「加载已解压的扩展程序」
+4. 选择 `extension/dist` 文件夹
 
-## Usage
+### 4. 配置扩展
 
-1. Browse Twitter/X as usual
-2. Click the bookmark button on any tweet
-3. The extension automatically:
-   - Captures tweet data (text, author, media)
-   - Sends to your local server
-   - Downloads media files
+1. 在扩展页面点击「详情」→「扩展程序选项」
+2. 确认服务器地址为 `http://localhost:3000`
+3. 点击「Test Connection」测试连接
 
-## API Endpoints
+## 使用方法
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Health check |
-| GET | `/api/bookmarks` | List all bookmarks |
-| GET | `/api/bookmarks/:id` | Get single bookmark |
-| POST | `/api/bookmarks` | Create bookmark |
-| DELETE | `/api/bookmarks/:id` | Delete bookmark |
-| GET | `/api/bookmarks/count` | Get bookmark count |
+1. 打开 https://x.com
+2. 浏览推文，点击「书签」按钮
+3. 扩展自动采集并发送到服务器
+4. 访问 http://localhost:3000/dashboard 查看
 
-## Configuration
+## API 接口
 
-### Extension Settings
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/health` | 健康检查 |
+| GET | `/api/bookmarks` | 获取书签列表 |
+| GET | `/api/bookmarks/:id` | 获取单个书签 |
+| POST | `/api/bookmarks` | 创建书签 |
+| DELETE | `/api/bookmarks/:id` | 删除书签 |
+| GET | `/api/bookmarks/count` | 获取书签数量 |
 
-- **Server URL**: Your backend server address
-- **Auto-sync**: Enable/disable automatic syncing
+## 技术栈
 
-### Server Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3000` | Server port |
-| `DB_PATH` | `./data/bookmarks.db` | SQLite database path |
-| `MEDIA_DIR` | `./media` | Media storage directory |
-| `REDIS_HOST` | `localhost` | Redis host (optional) |
-| `REDIS_PORT` | `6379` | Redis port |
-| `YTDLP_PATH` | `yt-dlp` | Path to yt-dlp executable |
-
-## Tech Stack
-
-### Extension
+### 扩展端
 - TypeScript
-- Vite + CRXJS
+- Vite
 - Chrome Extension Manifest V3
 
-### Server
+### 服务端
 - Node.js + TypeScript
-- Fastify (web framework)
-- SQLite (database)
-- BullMQ (job queue)
-- yt-dlp (media download)
+- Fastify
+- SQLite (better-sqlite3)
+- BullMQ (可选，需 Redis)
+- yt-dlp (视频下载)
 
-## Development
+## 安装 yt-dlp (可选)
 
-### Extension Development
+用于下载推文中的视频：
 
+**Windows:**
 ```bash
-cd extension
-pnpm dev    # Start dev server with hot reload
-pnpm build  # Build for production
+winget install yt-dlp
 ```
 
-### Server Development
-
+**Mac:**
 ```bash
-cd server
-pnpm dev    # Start with hot reload
-pnpm build  # Build TypeScript
-pnpm start  # Run production build
+brew install yt-dlp
 ```
+
+**Linux:**
+```bash
+pip install yt-dlp
+```
+
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `PORT` | `3000` | 服务端口 |
+| `DB_PATH` | `./data/bookmarks.db` | 数据库路径 |
+| `MEDIA_DIR` | `./media` | 媒体存储目录 |
+| `REDIS_HOST` | `localhost` | Redis 主机 |
+| `REDIS_PORT` | `6379` | Redis 端口 |
 
 ## License
 

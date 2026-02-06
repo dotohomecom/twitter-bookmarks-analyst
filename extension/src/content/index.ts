@@ -1,15 +1,30 @@
 // Content Script - Runs on X.com pages
 // Monitors bookmark button clicks and extracts tweet data
 
-import { TweetData, MessageType } from '../types'
-import { extractTweetData } from './extractor'
-import { findBookmarkButtons, isBookmarked, getTweetArticle } from './dom-utils'
+// Types
+interface TweetData {
+  tweetId: string
+  url: string
+  authorId: string
+  authorName: string
+  authorHandle: string
+  text: string
+  mediaType: 'none' | 'image' | 'video' | 'gif' | 'mixed'
+  mediaUrls: string[]
+  quotedTweetUrl?: string
+  bookmarkTime: string
+  rawHtml?: string
+}
+
+const MessageType = {
+  BOOKMARK_ADDED: 'BOOKMARK_ADDED',
+} as const
 
 // Track processed tweets to avoid duplicates
 const processedTweets = new Set<string>()
 
-// Main observer for dynamic content
-let mainObserver: MutationObserver | null = null
+// Debounce timer
+let scanTimeout: ReturnType<typeof setTimeout> | null = null
 
 // Initialize the content script
 function init(): void {
@@ -18,60 +33,230 @@ function init(): void {
   // Start observing the page
   setupObserver()
   
-  // Handle SPA navigation
-  setupNavigationListener()
-  
   // Initial scan for bookmark buttons
-  scanForBookmarkButtons()
+  setTimeout(scanForBookmarkButtons, 1000)
 }
 
 // Setup MutationObserver to watch for new tweets
 function setupObserver(): void {
-  if (mainObserver) {
-    mainObserver.disconnect()
-  }
-
-  mainObserver = new MutationObserver((mutations) => {
-    let shouldScan = false
-    
-    for (const mutation of mutations) {
-      if (mutation.addedNodes.length > 0) {
-        shouldScan = true
-        break
-      }
-    }
-    
-    if (shouldScan) {
-      // Debounce scanning
-      debounce(scanForBookmarkButtons, 300)()
-    }
+  const observer = new MutationObserver(() => {
+    // Debounce scanning
+    if (scanTimeout) clearTimeout(scanTimeout)
+    scanTimeout = setTimeout(scanForBookmarkButtons, 300)
   })
 
-  // Observe the main content area
-  const targetNode = document.body
-  mainObserver.observe(targetNode, {
+  observer.observe(document.body, {
     childList: true,
     subtree: true,
   })
 }
 
-// Setup listener for SPA navigation
-function setupNavigationListener(): void {
-  // Listen for URL changes (SPA navigation)
-  let lastUrl = location.href
+// Find all bookmark buttons on the page
+function findBookmarkButtons(): HTMLElement[] {
+  // Primary selector: data-testid
+  const buttons = document.querySelectorAll('[data-testid="bookmark"]')
+  if (buttons.length > 0) {
+    return Array.from(buttons) as HTMLElement[]
+  }
   
-  const urlObserver = new MutationObserver(() => {
-    if (location.href !== lastUrl) {
-      lastUrl = location.href
-      console.log('[Content] URL changed, rescanning...')
-      setTimeout(scanForBookmarkButtons, 500)
-    }
-  })
+  // Fallback: aria-label based selection
+  const ariaButtons = document.querySelectorAll(
+    '[aria-label*="Bookmark"], [aria-label*="bookmark"], [aria-label*="书签"]'
+  )
+  return Array.from(ariaButtons) as HTMLElement[]
+}
 
-  urlObserver.observe(document.body, {
-    childList: true,
-    subtree: true,
-  })
+// Check if a bookmark button is currently in "bookmarked" state
+function isBookmarked(button: HTMLElement): boolean {
+  const ariaLabel = button.getAttribute('aria-label') || ''
+  
+  // "Remove from Bookmarks" or similar indicates it's bookmarked
+  if (ariaLabel.toLowerCase().includes('remove') || 
+      ariaLabel.includes('取消') ||
+      ariaLabel.includes('移除')) {
+    return true
+  }
+  
+  return false
+}
+
+// Get the tweet article element containing the button
+function getTweetArticle(element: HTMLElement): HTMLElement | null {
+  let current: HTMLElement | null = element
+  
+  while (current && current !== document.body) {
+    if (current.tagName === 'ARTICLE') {
+      return current
+    }
+    if (current.getAttribute('data-testid') === 'tweet') {
+      return current
+    }
+    current = current.parentElement
+  }
+  
+  return null
+}
+
+// Extract tweet URL from article
+function extractTweetUrl(article: HTMLElement): string | null {
+  const timeElement = article.querySelector('time')
+  if (timeElement) {
+    const link = timeElement.closest('a')
+    if (link) {
+      const href = link.getAttribute('href')
+      if (href && href.includes('/status/')) {
+        return `https://x.com${href}`
+      }
+    }
+  }
+  
+  const statusLinks = article.querySelectorAll('a[href*="/status/"]')
+  for (const link of statusLinks) {
+    const href = link.getAttribute('href')
+    if (href && /\/status\/\d+/.test(href)) {
+      return `https://x.com${href}`
+    }
+  }
+  
+  return null
+}
+
+// Extract tweet ID from URL
+function extractTweetId(url: string): string | null {
+  const match = url.match(/\/status\/(\d+)/)
+  return match ? match[1] : null
+}
+
+// Extract author information from article
+function extractAuthorInfo(article: HTMLElement): { 
+  authorId: string
+  authorName: string
+  authorHandle: string 
+} | null {
+  const userLinks = article.querySelectorAll('a[href^="/"]')
+  
+  for (const link of userLinks) {
+    const href = link.getAttribute('href')
+    if (href && !href.includes('/status/') && !href.includes('/photo/') && 
+        !href.includes('/video/') && href.match(/^\/[a-zA-Z0-9_]+$/)) {
+      
+      const handle = href.slice(1)
+      
+      const parentCell = link.closest('[data-testid="User-Name"]') || 
+                         link.closest('[data-testid="UserName"]')
+      
+      let displayName = handle
+      if (parentCell) {
+        const nameSpan = parentCell.querySelector('span')
+        if (nameSpan?.textContent) {
+          displayName = nameSpan.textContent.trim()
+        }
+      }
+      
+      return {
+        authorId: handle,
+        authorName: displayName,
+        authorHandle: `@${handle}`,
+      }
+    }
+  }
+  
+  return null
+}
+
+// Extract tweet text content
+function extractTweetText(article: HTMLElement): string {
+  const tweetTextElement = article.querySelector('[data-testid="tweetText"]')
+  if (tweetTextElement) {
+    return tweetTextElement.textContent?.trim() || ''
+  }
+  
+  const textDivs = article.querySelectorAll('[lang]')
+  for (const div of textDivs) {
+    const text = div.textContent?.trim()
+    if (text && text.length > 0) {
+      return text
+    }
+  }
+  
+  return ''
+}
+
+// Extract media URLs and type from article
+function extractMediaInfo(article: HTMLElement): {
+  mediaType: 'none' | 'image' | 'video' | 'gif' | 'mixed'
+  mediaUrls: string[]
+} {
+  const mediaUrls: string[] = []
+  let hasImage = false
+  let hasVideo = false
+  
+  // Find images
+  const images = article.querySelectorAll('img[src*="pbs.twimg.com/media"]')
+  for (const img of images) {
+    const src = img.getAttribute('src')
+    if (src) {
+      const originalUrl = src.replace(/&name=\w+/, '&name=orig')
+      mediaUrls.push(originalUrl)
+      hasImage = true
+    }
+  }
+  
+  // Find videos
+  const videos = article.querySelectorAll('video')
+  if (videos.length > 0) {
+    hasVideo = true
+  }
+  
+  // Check for video player
+  const videoPlayers = article.querySelectorAll('[data-testid="videoPlayer"]')
+  if (videoPlayers.length > 0) {
+    hasVideo = true
+  }
+  
+  // Determine media type
+  let mediaType: 'none' | 'image' | 'video' | 'gif' | 'mixed' = 'none'
+  if (hasImage && hasVideo) {
+    mediaType = 'mixed'
+  } else if (hasVideo) {
+    mediaType = 'video'
+  } else if (hasImage) {
+    mediaType = 'image'
+  }
+  
+  return { mediaType, mediaUrls }
+}
+
+// Extract complete tweet data from an article element
+function extractTweetData(article: HTMLElement): TweetData | null {
+  try {
+    const url = extractTweetUrl(article)
+    if (!url) return null
+    
+    const tweetId = extractTweetId(url)
+    if (!tweetId) return null
+    
+    const authorInfo = extractAuthorInfo(article)
+    if (!authorInfo) return null
+    
+    const text = extractTweetText(article)
+    const { mediaType, mediaUrls } = extractMediaInfo(article)
+    
+    return {
+      tweetId,
+      url,
+      authorId: authorInfo.authorId,
+      authorName: authorInfo.authorName,
+      authorHandle: authorInfo.authorHandle,
+      text,
+      mediaType,
+      mediaUrls,
+      bookmarkTime: new Date().toISOString(),
+    }
+  } catch (error) {
+    console.error('[Content] Error extracting tweet data:', error)
+    return null
+  }
 }
 
 // Scan page for bookmark buttons and attach listeners
@@ -79,13 +264,8 @@ function scanForBookmarkButtons(): void {
   const buttons = findBookmarkButtons()
   
   buttons.forEach((button) => {
-    // Check if already processed
-    if (button.dataset.bookmarkListenerAttached) {
-      return
-    }
-    
+    if (button.dataset.bookmarkListenerAttached) return
     button.dataset.bookmarkListenerAttached = 'true'
-    
     button.addEventListener('click', handleBookmarkClick)
   })
 }
@@ -93,65 +273,43 @@ function scanForBookmarkButtons(): void {
 // Handle bookmark button click
 async function handleBookmarkClick(event: Event): Promise<void> {
   const button = event.currentTarget as HTMLElement
-  
-  // Get the tweet article containing this button
   const tweetArticle = getTweetArticle(button)
-  if (!tweetArticle) {
-    console.warn('[Content] Could not find tweet article')
-    return
-  }
+  if (!tweetArticle) return
 
-  // Check if this is adding or removing bookmark
   const wasBookmarked = isBookmarked(button)
   
-  // Wait a moment for the UI to update
+  // Wait for UI to update
   await new Promise(resolve => setTimeout(resolve, 500))
   
-  // Check new state
   const nowBookmarked = isBookmarked(button)
   
-  // Only process if bookmark was added (not removed)
+  // Only process if bookmark was added
   if (!wasBookmarked && nowBookmarked) {
     console.log('[Content] Bookmark added, extracting tweet data...')
     
-    try {
-      const tweetData = extractTweetData(tweetArticle)
-      
-      if (!tweetData) {
-        console.warn('[Content] Could not extract tweet data')
-        return
+    const tweetData = extractTweetData(tweetArticle)
+    if (!tweetData) return
+    
+    if (processedTweets.has(tweetData.tweetId)) return
+    processedTweets.add(tweetData.tweetId)
+    
+    // Send to background script
+    chrome.runtime.sendMessage({
+      type: MessageType.BOOKMARK_ADDED,
+      data: tweetData,
+    }, (response) => {
+      if (response?.success) {
+        showNotification('✓ Bookmark saved to server!')
+      } else {
+        showNotification('⏳ Saved locally, will sync later', 'warning')
       }
-      
-      // Check for duplicate
-      if (processedTweets.has(tweetData.tweetId)) {
-        console.log('[Content] Tweet already processed, skipping...')
-        return
-      }
-      
-      processedTweets.add(tweetData.tweetId)
-      
-      // Send to background script
-      chrome.runtime.sendMessage({
-        type: MessageType.BOOKMARK_ADDED,
-        data: tweetData,
-      }, (response) => {
-        if (response?.success) {
-          showNotification('Tweet bookmarked and saved!')
-        } else {
-          showNotification('Saved locally, will sync later', 'warning')
-        }
-      })
-      
-    } catch (error) {
-      console.error('[Content] Error extracting tweet data:', error)
-    }
+    })
   }
 }
 
 // Show notification to user
 function showNotification(message: string, type: 'success' | 'warning' = 'success'): void {
   const notification = document.createElement('div')
-  notification.className = 'tba-notification'
   notification.textContent = message
   notification.style.cssText = `
     position: fixed;
@@ -166,42 +324,16 @@ function showNotification(message: string, type: 'success' | 'warning' = 'succes
     font-weight: 500;
     z-index: 10000;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    animation: slideIn 0.3s ease;
   `
   
   document.body.appendChild(notification)
   
   setTimeout(() => {
-    notification.style.animation = 'slideOut 0.3s ease'
+    notification.style.opacity = '0'
+    notification.style.transition = 'opacity 0.3s'
     setTimeout(() => notification.remove(), 300)
   }, 3000)
 }
 
-// Inject CSS for animations
-function injectStyles(): void {
-  const style = document.createElement('style')
-  style.textContent = `
-    @keyframes slideIn {
-      from { transform: translateX(100px); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-    @keyframes slideOut {
-      from { transform: translateX(0); opacity: 1; }
-      to { transform: translateX(100px); opacity: 0; }
-    }
-  `
-  document.head.appendChild(style)
-}
-
-// Debounce utility
-function debounce<T extends (...args: unknown[]) => void>(fn: T, delay: number): T {
-  let timeoutId: ReturnType<typeof setTimeout>
-  return ((...args: unknown[]) => {
-    clearTimeout(timeoutId)
-    timeoutId = setTimeout(() => fn(...args), delay)
-  }) as T
-}
-
 // Start the extension
-injectStyles()
 init()

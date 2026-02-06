@@ -1,7 +1,32 @@
 // Background Service Worker
 // Handles communication between content script and server
 
-import { TweetData, Settings, MessageType } from '../types'
+// Types
+interface TweetData {
+  tweetId: string
+  url: string
+  authorId: string
+  authorName: string
+  authorHandle: string
+  text: string
+  mediaType: 'none' | 'image' | 'video' | 'gif' | 'mixed'
+  mediaUrls: string[]
+  quotedTweetUrl?: string
+  bookmarkTime: string
+  rawHtml?: string
+}
+
+interface Settings {
+  serverUrl: string
+  enabled: boolean
+}
+
+// Message types
+const MessageType = {
+  BOOKMARK_ADDED: 'BOOKMARK_ADDED',
+  GET_SETTINGS: 'GET_SETTINGS',
+  SAVE_SETTINGS: 'SAVE_SETTINGS',
+} as const
 
 // Default settings
 const DEFAULT_SETTINGS: Settings = {

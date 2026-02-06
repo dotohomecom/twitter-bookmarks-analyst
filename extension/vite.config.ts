@@ -1,16 +1,29 @@
+// Vite configuration for Chrome Extension build
 import { defineConfig } from 'vite'
-import { crx } from '@crxjs/vite-plugin'
-import manifest from './manifest.json'
+import { resolve } from 'path'
 
 export default defineConfig({
-  plugins: [
-    crx({ manifest }),
-  ],
   build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    sourcemap: false,
+    minify: true,
     rollupOptions: {
       input: {
-        options: 'src/options/options.html',
+        background: resolve(__dirname, 'src/background/index.ts'),
+        content: resolve(__dirname, 'src/content/index.ts'),
       },
+      output: {
+        entryFileNames: '[name].js',
+        chunkFileNames: 'chunks/[name].js',
+        assetFileNames: 'assets/[name].[ext]',
+        format: 'es',
+      },
+    },
+  },
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src'),
     },
   },
 })
