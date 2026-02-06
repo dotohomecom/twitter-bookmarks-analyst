@@ -1,9 +1,9 @@
 // Media downloader service
-// Handles downloading images, videos, and GIFs from tweets
+// Handles downloading images and videos from tweets
 
 import { mkdir, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
-import { join, extname } from 'path'
+import { join } from 'path'
 import { spawn } from 'child_process'
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
@@ -27,24 +27,18 @@ export async function downloadMedia(request: DownloadRequest): Promise<string[]>
   }
 
   // Download images directly
-  if (mediaType === 'image' || mediaType === 'mixed') {
+  if (mediaUrls.length > 0) {
     const imagePaths = await downloadImages(mediaUrls, tweetMediaDir, tweetId)
     downloadedPaths.push(...imagePaths)
   }
 
   // Use yt-dlp for videos
-  if (mediaType === 'video' || mediaType === 'gif' || mediaType === 'mixed') {
+  if (mediaType === 'video' || mediaType === 'gif') {
     try {
       const videoPaths = await downloadWithYtdlp(tweetUrl, tweetMediaDir, tweetId)
       downloadedPaths.push(...videoPaths)
     } catch (error) {
-      logger.warn({ tweetId, error }, 'yt-dlp download failed, trying direct download')
-      // Fallback: try direct download of video URLs
-      const videoUrls = mediaUrls.filter(url => 
-        url.includes('.mp4') || url.includes('video')
-      )
-      const videoPaths = await downloadVideoDirect(videoUrls, tweetMediaDir, tweetId)
-      downloadedPaths.push(...videoPaths)
+      logger.warn({ tweetId, error }, 'yt-dlp download failed (may not be installed)')
     }
   }
 
@@ -63,16 +57,15 @@ async function downloadImages(
     const url = urls[i]
     
     // Skip non-image URLs
-    if (!url.includes('pbs.twimg.com') && !url.includes('.jpg') && !url.includes('.png')) {
+    if (!url.includes('twimg.com')) {
       continue
     }
 
     try {
       // Determine file extension
       let ext = '.jpg'
-      if (url.includes('.png')) ext = '.png'
+      if (url.includes('.png') || url.includes('format=png')) ext = '.png'
       if (url.includes('.gif')) ext = '.gif'
-      if (url.includes('format=png')) ext = '.png'
       
       const fileName = `${tweetId}_${i + 1}${ext}`
       const filePath = join(destDir, fileName)
@@ -87,42 +80,9 @@ async function downloadImages(
       await writeFile(filePath, Buffer.from(buffer))
       
       downloadedPaths.push(filePath)
-      logger.debug({ url, filePath }, 'Image downloaded')
+      logger.debug({ url: url.substring(0, 50), filePath }, 'Image downloaded')
     } catch (error) {
-      logger.error({ url, error }, 'Failed to download image')
-    }
-  }
-
-  return downloadedPaths
-}
-
-async function downloadVideoDirect(
-  urls: string[],
-  destDir: string,
-  tweetId: string
-): Promise<string[]> {
-  const downloadedPaths: string[] = []
-
-  for (let i = 0; i < urls.length; i++) {
-    const url = urls[i]
-    
-    try {
-      const ext = extname(new URL(url).pathname) || '.mp4'
-      const fileName = `${tweetId}_video_${i + 1}${ext}`
-      const filePath = join(destDir, fileName)
-
-      const response = await fetch(url)
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      const buffer = await response.arrayBuffer()
-      await writeFile(filePath, Buffer.from(buffer))
-      
-      downloadedPaths.push(filePath)
-      logger.debug({ url, filePath }, 'Video downloaded directly')
-    } catch (error) {
-      logger.error({ url, error }, 'Failed to download video directly')
+      logger.error({ url: url.substring(0, 50), error }, 'Failed to download image')
     }
   }
 
@@ -135,7 +95,7 @@ async function downloadWithYtdlp(
   tweetId: string
 ): Promise<string[]> {
   return new Promise((resolve, reject) => {
-    const outputTemplate = join(destDir, `${tweetId}_%(autonumber)s.%(ext)s`)
+    const outputTemplate = join(destDir, `${tweetId}_video.%(ext)s`)
     
     const args = [
       tweetUrl,
@@ -143,22 +103,16 @@ async function downloadWithYtdlp(
       '--no-warnings',
       '--no-progress',
       '-f', 'best[ext=mp4]/best',
-      '--write-thumbnail',
-      '--convert-thumbnails', 'jpg',
     ]
 
-    logger.debug({ cmd: config.ytdlpPath, args }, 'Running yt-dlp')
+    logger.debug({ cmd: config.ytdlpPath, args: args.slice(0, 3) }, 'Running yt-dlp')
 
     const proc = spawn(config.ytdlpPath, args, {
       cwd: destDir,
+      shell: true,
     })
 
-    let stdout = ''
     let stderr = ''
-
-    proc.stdout.on('data', (data) => {
-      stdout += data.toString()
-    })
 
     proc.stderr.on('data', (data) => {
       stderr += data.toString()
@@ -166,7 +120,6 @@ async function downloadWithYtdlp(
 
     proc.on('close', async (code) => {
       if (code !== 0) {
-        logger.error({ code, stderr }, 'yt-dlp failed')
         reject(new Error(`yt-dlp exited with code ${code}: ${stderr}`))
         return
       }
@@ -176,7 +129,7 @@ async function downloadWithYtdlp(
         const { readdir } = await import('fs/promises')
         const files = await readdir(destDir)
         const downloadedPaths = files
-          .filter(f => f.startsWith(tweetId))
+          .filter(f => f.includes('_video'))
           .map(f => join(destDir, f))
         
         resolve(downloadedPaths)
@@ -186,8 +139,9 @@ async function downloadWithYtdlp(
     })
 
     proc.on('error', (error) => {
-      logger.error({ error }, 'Failed to spawn yt-dlp')
-      reject(error)
+      // yt-dlp not installed is ok
+      logger.debug({ error: error.message }, 'yt-dlp not available')
+      resolve([])
     })
   })
 }

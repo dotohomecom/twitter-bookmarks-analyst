@@ -1,20 +1,20 @@
-// Database initialization and connection
-import Database from 'better-sqlite3'
+// Database initialization and connection using sql.js (pure JavaScript SQLite)
+import initSqlJs, { Database as SqlJsDatabase } from 'sql.js'
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
-import { mkdirSync, existsSync } from 'fs'
+import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'fs'
 import { dirname } from 'path'
 
-let db: Database.Database
+let db: SqlJsDatabase | null = null
 
-export function getDb(): Database.Database {
+export function getDb(): SqlJsDatabase {
   if (!db) {
     throw new Error('Database not initialized. Call initDatabase() first.')
   }
   return db
 }
 
-export function initDatabase(): void {
+export async function initDatabase(): Promise<void> {
   // Ensure directory exists
   const dbDir = dirname(config.dbPath)
   if (!existsSync(dbDir)) {
@@ -22,21 +22,33 @@ export function initDatabase(): void {
     logger.info(`Created database directory: ${dbDir}`)
   }
 
-  // Create database connection
-  db = new Database(config.dbPath)
-  db.pragma('journal_mode = WAL')
+  // Initialize sql.js
+  const SQL = await initSqlJs()
   
-  logger.info(`Database connected: ${config.dbPath}`)
+  // Load existing database or create new one
+  if (existsSync(config.dbPath)) {
+    const fileBuffer = readFileSync(config.dbPath)
+    db = new SQL.Database(fileBuffer)
+    logger.info(`Database loaded from: ${config.dbPath}`)
+  } else {
+    db = new SQL.Database()
+    logger.info(`Created new database: ${config.dbPath}`)
+  }
 
   // Run migrations
   migrate()
+  
+  // Save database
+  saveDatabase()
 }
 
 function migrate(): void {
+  if (!db) return
+  
   logger.info('Running database migrations...')
 
   // Create bookmarks table
-  db.exec(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS bookmarks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tweet_id TEXT UNIQUE NOT NULL,
@@ -57,44 +69,35 @@ function migrate(): void {
     )
   `)
 
-  // Create index for faster queries
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_bookmarks_tweet_id ON bookmarks(tweet_id);
-    CREATE INDEX IF NOT EXISTS idx_bookmarks_author_id ON bookmarks(author_id);
-    CREATE INDEX IF NOT EXISTS idx_bookmarks_status ON bookmarks(status);
-    CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks(created_at);
-  `)
-
-  // Create media_downloads table for tracking individual media files
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS media_downloads (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      bookmark_id INTEGER NOT NULL,
-      original_url TEXT NOT NULL,
-      local_path TEXT,
-      file_name TEXT,
-      file_size INTEGER,
-      mime_type TEXT,
-      status TEXT DEFAULT 'pending',
-      error_message TEXT,
-      retry_count INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (bookmark_id) REFERENCES bookmarks(id)
-    )
-  `)
-
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_media_downloads_bookmark_id ON media_downloads(bookmark_id);
-    CREATE INDEX IF NOT EXISTS idx_media_downloads_status ON media_downloads(status);
-  `)
+  // Create indexes
+  db.run(`CREATE INDEX IF NOT EXISTS idx_bookmarks_tweet_id ON bookmarks(tweet_id)`)
+  db.run(`CREATE INDEX IF NOT EXISTS idx_bookmarks_author_id ON bookmarks(author_id)`)
+  db.run(`CREATE INDEX IF NOT EXISTS idx_bookmarks_status ON bookmarks(status)`)
+  db.run(`CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks(created_at)`)
 
   logger.info('Database migrations completed')
 }
 
+export function saveDatabase(): void {
+  if (!db) return
+  
+  const data = db.export()
+  const buffer = Buffer.from(data)
+  writeFileSync(config.dbPath, buffer)
+}
+
 export function closeDatabase(): void {
   if (db) {
+    saveDatabase()
     db.close()
+    db = null
     logger.info('Database connection closed')
   }
 }
+
+// Auto-save database periodically
+setInterval(() => {
+  if (db) {
+    saveDatabase()
+  }
+}, 30000) // Every 30 seconds

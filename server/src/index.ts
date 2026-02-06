@@ -14,7 +14,7 @@ import { existsSync, mkdirSync } from 'fs'
 async function main() {
   // Initialize database
   logger.info('Initializing database...')
-  initDatabase()
+  await initDatabase()
 
   // Ensure media directory exists
   if (!existsSync(config.mediaDir)) {
