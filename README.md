@@ -64,7 +64,7 @@ npm install
 npm run dev
 ```
 
-服务启动后访问: http://localhost:3000/dashboard
+服务启动后访问: http://localhost:3001/dashboard
 
 ### 2. 构建 Chrome 扩展
 
@@ -84,7 +84,7 @@ npm run build
 ### 4. 配置扩展
 
 1. 在扩展页面点击「详情」→「扩展程序选项」
-2. 确认服务器地址为 `http://localhost:3000`
+2. 确认服务器地址为 `http://localhost:3001`
 3. 点击「Test Connection」测试连接
 
 ## 使用方法
@@ -92,7 +92,7 @@ npm run build
 1. 打开 https://x.com
 2. 浏览推文，点击「书签」按钮
 3. 扩展自动采集并发送到服务器
-4. 访问 http://localhost:3000/dashboard 查看
+4. 访问 http://localhost:3001/dashboard 查看
 
 ## API 接口
 
@@ -142,7 +142,7 @@ pip install yt-dlp
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `PORT` | `3000` | 服务端口 |
+| `PORT` | `3001` | 服务端口 |
 | `DB_PATH` | `./data/bookmarks.db` | 数据库路径 |
 | `MEDIA_DIR` | `./media` | 媒体存储目录 |
 | `REDIS_HOST` | `localhost` | Redis 主机 |
