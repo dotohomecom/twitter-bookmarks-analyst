@@ -1,0 +1,272 @@
+// Simple dashboard for viewing bookmarks
+import Fastify from 'fastify'
+import { readFileSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+export function registerDashboard(app: ReturnType<typeof Fastify>) {
+  // Serve dashboard HTML
+  app.get('/dashboard', async (_request, reply) => {
+    reply.type('text/html')
+    return getDashboardHtml()
+  })
+}
+
+function getDashboardHtml(): string {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Twitter Bookmarks Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #e4e6eb;
+    }
+    
+    .header {
+      background: rgba(0,0,0,0.3);
+      padding: 20px 40px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .header h1 {
+      font-size: 24px;
+      background: linear-gradient(135deg, #1da1f2, #17bf63);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+    
+    .stat-card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .stat-value {
+      font-size: 48px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #1da1f2, #17bf63);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .stat-label {
+      color: #8899a6;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+    
+    .bookmarks-grid {
+      display: grid;
+      gap: 20px;
+    }
+    
+    .bookmark-card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid rgba(255,255,255,0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .bookmark-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+    
+    .bookmark-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    
+    .avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1da1f2, #17bf63);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 20px;
+    }
+    
+    .author-info h3 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    
+    .author-info span {
+      color: #8899a6;
+      font-size: 14px;
+    }
+    
+    .bookmark-text {
+      font-size: 15px;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+    
+    .bookmark-media {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    
+    .bookmark-media img {
+      width: 100%;
+      border-radius: 8px;
+      aspect-ratio: 16/9;
+      object-fit: cover;
+    }
+    
+    .bookmark-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #8899a6;
+      font-size: 12px;
+    }
+    
+    .status-badge {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    
+    .status-completed { background: rgba(23,191,99,0.2); color: #17bf63; }
+    .status-pending { background: rgba(255,173,31,0.2); color: #ffad1f; }
+    .status-failed { background: rgba(244,33,46,0.2); color: #f4212e; }
+    
+    .loading {
+      text-align: center;
+      padding: 60px;
+      color: #8899a6;
+    }
+    
+    .empty {
+      text-align: center;
+      padding: 60px;
+      color: #8899a6;
+    }
+    
+    a { color: #1da1f2; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🔖 Twitter Bookmarks Dashboard</h1>
+  </div>
+  
+  <div class="container">
+    <div class="stats" id="stats">
+      <div class="stat-card">
+        <div class="stat-value" id="totalCount">-</div>
+        <div class="stat-label">Total Bookmarks</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="completedCount">-</div>
+        <div class="stat-label">Media Downloaded</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="pendingCount">-</div>
+        <div class="stat-label">Pending</div>
+      </div>
+    </div>
+    
+    <div class="bookmarks-grid" id="bookmarks">
+      <div class="loading">Loading bookmarks...</div>
+    </div>
+  </div>
+  
+  <script>
+    async function loadBookmarks() {
+      try {
+        const response = await fetch('/api/bookmarks?limit=50')
+        const data = await response.json()
+        
+        if (!data.success) throw new Error(data.error)
+        
+        document.getElementById('totalCount').textContent = data.pagination.total
+        
+        const bookmarks = data.data
+        const completed = bookmarks.filter(b => b.status === 'completed').length
+        const pending = bookmarks.filter(b => b.status === 'pending' || b.status === 'downloading').length
+        
+        document.getElementById('completedCount').textContent = completed
+        document.getElementById('pendingCount').textContent = pending
+        
+        const container = document.getElementById('bookmarks')
+        
+        if (bookmarks.length === 0) {
+          container.innerHTML = '<div class="empty">No bookmarks yet. Start bookmarking tweets!</div>'
+          return
+        }
+        
+        container.innerHTML = bookmarks.map(bookmark => \`
+          <div class="bookmark-card">
+            <div class="bookmark-header">
+              <div class="avatar">\${bookmark.authorName.charAt(0).toUpperCase()}</div>
+              <div class="author-info">
+                <h3>\${bookmark.authorName}</h3>
+                <span>\${bookmark.authorHandle}</span>
+              </div>
+            </div>
+            <div class="bookmark-text">\${bookmark.text || '<em>No text content</em>'}</div>
+            \${bookmark.mediaType !== 'none' ? \`
+              <div class="bookmark-media">
+                \${bookmark.mediaPaths.slice(0, 4).map(path => 
+                  \`<img src="/media/\${bookmark.tweetId}/\${path.split('/').pop()}" alt="Media" onerror="this.style.display='none'">\`
+                ).join('')}
+              </div>
+            \` : ''}
+            <div class="bookmark-footer">
+              <a href="\${bookmark.url}" target="_blank">View on X →</a>
+              <span class="status-badge status-\${bookmark.status}">\${bookmark.status}</span>
+            </div>
+          </div>
+        \`).join('')
+        
+      } catch (error) {
+        document.getElementById('bookmarks').innerHTML = 
+          '<div class="empty">Failed to load bookmarks: ' + error.message + '</div>'
+      }
+    }
+    
+    loadBookmarks()
+    setInterval(loadBookmarks, 30000) // Refresh every 30s
+  </script>
+</body>
+</html>
+`
+}

@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Twitter Bookmarks Analyst",
+  "version": "1.0.0",
+  "description": "Automatically collect and save Twitter/X bookmarks to your server",
+  "permissions": [
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "*://x.com/*",
+    "*://twitter.com/*",
+    "http://localhost:3000/*"
+  ],
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://x.com/*", "*://twitter.com/*"],
+      "js": ["src/content/index.ts"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "src/options/options.html",
+  "action": {
+    "default_title": "Twitter Bookmarks Analyst"
+  }
+}
