@@ -30,7 +30,7 @@ const MessageType = {
 
 // Default settings
 const DEFAULT_SETTINGS: Settings = {
-  serverUrl: 'http://localhost:3000',
+  serverUrl: 'http://localhost:3001',
   enabled: true,
 }
 

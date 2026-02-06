@@ -6,7 +6,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export const config = {
   // Server
-  port: parseInt(process.env.PORT || '3000', 10),
+  port: parseInt(process.env.PORT || '3001', 10),
   
   // Database
   dbPath: process.env.DB_PATH || join(__dirname, '..', 'data', 'bookmarks.db'),

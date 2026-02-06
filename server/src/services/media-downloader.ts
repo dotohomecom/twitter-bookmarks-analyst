@@ -1,7 +1,7 @@
 // Media downloader service
 // Handles downloading images and videos from tweets
 
-import { mkdir, writeFile } from 'fs/promises'
+import { mkdir, writeFile, readdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { spawn } from 'child_process'
@@ -89,6 +89,14 @@ async function downloadImages(
   return downloadedPaths
 }
 
+/**
+ * Download video using yt-dlp with EJS challenge solver
+ * 
+ * Key parameters:
+ * - --remote-components ejs:npm : Install EJS challenge solver script (uses Deno)
+ * - -f best[ext=mp4]/best : Prefer MP4 format
+ * - --no-warnings : Suppress warnings
+ */
 async function downloadWithYtdlp(
   tweetUrl: string,
   destDir: string,
@@ -103,16 +111,32 @@ async function downloadWithYtdlp(
       '--no-warnings',
       '--no-progress',
       '-f', 'best[ext=mp4]/best',
+      // EJS challenge solver - requires Deno to be installed
+      '--remote-components', 'ejs:npm',
+      // Additional recommended options for Twitter/X
+      '--no-check-certificates',
+      '--extractor-args', 'twitter:api=syndication',
     ]
 
-    logger.debug({ cmd: config.ytdlpPath, args: args.slice(0, 3) }, 'Running yt-dlp')
+    logger.debug({ cmd: config.ytdlpPath, args: args.slice(0, 5) }, 'Running yt-dlp with EJS solver')
 
     const proc = spawn(config.ytdlpPath, args, {
       cwd: destDir,
       shell: true,
+      env: {
+        ...process.env,
+        // Ensure Deno is available for EJS solver
+        PATH: process.env.PATH,
+      },
     })
 
+    let stdout = ''
     let stderr = ''
+
+    proc.stdout.on('data', (data) => {
+      stdout += data.toString()
+      logger.debug({ stdout: data.toString().trim() }, 'yt-dlp stdout')
+    })
 
     proc.stderr.on('data', (data) => {
       stderr += data.toString()
@@ -120,18 +144,19 @@ async function downloadWithYtdlp(
 
     proc.on('close', async (code) => {
       if (code !== 0) {
-        reject(new Error(`yt-dlp exited with code ${code}: ${stderr}`))
+        logger.error({ code, stderr: stderr.substring(0, 500) }, 'yt-dlp failed')
+        reject(new Error(`yt-dlp exited with code ${code}: ${stderr.substring(0, 200)}`))
         return
       }
 
       // Find downloaded files
       try {
-        const { readdir } = await import('fs/promises')
         const files = await readdir(destDir)
         const downloadedPaths = files
           .filter(f => f.includes('_video'))
           .map(f => join(destDir, f))
         
+        logger.info({ tweetId, files: downloadedPaths }, 'yt-dlp download successful')
         resolve(downloadedPaths)
       } catch (error) {
         reject(error)
