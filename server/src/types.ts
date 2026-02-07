@@ -1,6 +1,22 @@
 // Shared types for the server
 
 export type BookmarkStatus = 'pending' | 'downloading' | 'completed' | 'failed'
+export type BookmarkMediaKind = 'image' | 'video' | 'gif'
+export type BookmarkMediaStatus = 'pending' | 'downloading' | 'completed' | 'failed'
+
+export interface BookmarkMediaItem {
+  id: number
+  bookmarkId: number
+  mediaKind: BookmarkMediaKind
+  sourceUrl: string
+  sequenceNo: number
+  status: BookmarkMediaStatus
+  localPath?: string
+  errorMessage?: string
+  retryCount: number
+  createdAt: string
+  updatedAt: string
+}
 
 export interface Bookmark {
   id: number
@@ -14,6 +30,7 @@ export interface Bookmark {
   mediaUrls: string[]
   mediaPaths: string[]
   mediaDownloadFailed: boolean
+  mediaItems?: BookmarkMediaItem[]
   quotedTweetUrl?: string
   status: BookmarkStatus
   bookmarkTime: string

@@ -3,11 +3,13 @@ import { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import {
   createBookmark,
+  deleteBookmark,
   getAllBookmarks,
   getBookmarkById,
   getBookmarkByTweetId,
-  deleteBookmark,
+  getBookmarkMediaItems,
   getBookmarksCount,
+  getMediaItemsForBookmarks,
 } from '../db/bookmarks.js'
 import { addMediaDownloadJob } from '../queue/media-queue.js'
 import { logger } from '../utils/logger.js'
@@ -28,6 +30,21 @@ const bookmarkInputSchema = z.object({
   rawHtml: z.string().optional(),
 })
 
+function withMediaItems(bookmark: Bookmark): Bookmark {
+  return {
+    ...bookmark,
+    mediaItems: getBookmarkMediaItems(bookmark.id),
+  }
+}
+
+function withMediaItemsBatch(bookmarks: Bookmark[]): Bookmark[] {
+  const mediaMap = getMediaItemsForBookmarks(bookmarks.map((bookmark) => bookmark.id))
+  return bookmarks.map((bookmark) => ({
+    ...bookmark,
+    mediaItems: mediaMap.get(bookmark.id) || [],
+  }))
+}
+
 export const bookmarkRoutes: FastifyPluginAsync = async (app) => {
   // Create bookmark
   app.post<{ Body: z.infer<typeof bookmarkInputSchema> }>(
@@ -36,7 +53,7 @@ export const bookmarkRoutes: FastifyPluginAsync = async (app) => {
       try {
         // Validate input
         const input = bookmarkInputSchema.parse(request.body)
-        
+
         logger.info({ tweetId: input.tweetId }, 'Received bookmark request')
 
         // Check if bookmark already exists
@@ -47,41 +64,40 @@ export const bookmarkRoutes: FastifyPluginAsync = async (app) => {
 
         // Create or update bookmark
         const bookmark = createBookmark(input)
-        
+
         logger.info({ id: bookmark.id, tweetId: bookmark.tweetId }, 'Bookmark saved')
 
-        // Queue media download if there are media URLs
-        if (input.mediaUrls && input.mediaUrls.length > 0) {
+        const hasImageCandidates = Boolean(input.mediaUrls && input.mediaUrls.length > 0)
+        const hasVideoCandidates = input.mediaType === 'video' || input.mediaType === 'gif' || input.mediaType === 'mixed'
+
+        if (hasImageCandidates || hasVideoCandidates) {
           await addMediaDownloadJob({
             bookmarkId: bookmark.id,
             tweetId: bookmark.tweetId,
             tweetUrl: bookmark.url,
-            mediaUrls: input.mediaUrls,
+            mediaUrls: input.mediaUrls || [],
             mediaType: input.mediaType || 'none',
           })
-          logger.info({ id: bookmark.id, mediaCount: input.mediaUrls.length }, 'Media download job queued')
-        } else if (input.mediaType === 'video') {
-          // Video might not have direct URL, queue for yt-dlp download
-          await addMediaDownloadJob({
-            bookmarkId: bookmark.id,
-            tweetId: bookmark.tweetId,
-            tweetUrl: bookmark.url,
-            mediaUrls: [],
-            mediaType: 'video',
-          })
-          logger.info({ id: bookmark.id }, 'Video download job queued (yt-dlp)')
+          logger.info(
+            {
+              id: bookmark.id,
+              mediaType: input.mediaType,
+              candidateCount: (input.mediaUrls || []).length,
+            },
+            'Media download job queued',
+          )
         }
 
         const response: ApiResponse<Bookmark> = {
           success: true,
-          data: bookmark,
+          data: withMediaItems(bookmark),
           message: 'Bookmark saved successfully',
         }
 
         return reply.code(201).send(response)
       } catch (error) {
         logger.error({ error }, 'Failed to create bookmark')
-        
+
         if (error instanceof z.ZodError) {
           return reply.code(400).send({
             success: false,
@@ -95,7 +111,7 @@ export const bookmarkRoutes: FastifyPluginAsync = async (app) => {
           error: (error as Error).message,
         })
       }
-    }
+    },
   )
 
   // Get all bookmarks
@@ -105,13 +121,13 @@ export const bookmarkRoutes: FastifyPluginAsync = async (app) => {
       try {
         const limit = parseInt(request.query.limit || '100', 10)
         const offset = parseInt(request.query.offset || '0', 10)
-        
+
         const bookmarks = getAllBookmarks(limit, offset)
         const total = getBookmarksCount()
 
         return reply.send({
           success: true,
-          data: bookmarks,
+          data: withMediaItemsBatch(bookmarks),
           pagination: {
             total,
             limit,
@@ -126,7 +142,7 @@ export const bookmarkRoutes: FastifyPluginAsync = async (app) => {
           error: (error as Error).message,
         })
       }
-    }
+    },
   )
 
   // Get bookmark by ID
@@ -146,7 +162,7 @@ export const bookmarkRoutes: FastifyPluginAsync = async (app) => {
 
         return reply.send({
           success: true,
-          data: bookmark,
+          data: withMediaItems(bookmark),
         })
       } catch (error) {
         logger.error({ error }, 'Failed to get bookmark')
@@ -155,7 +171,7 @@ export const bookmarkRoutes: FastifyPluginAsync = async (app) => {
           error: (error as Error).message,
         })
       }
-    }
+    },
   )
 
   // Delete bookmark
@@ -184,6 +200,6 @@ export const bookmarkRoutes: FastifyPluginAsync = async (app) => {
           error: (error as Error).message,
         })
       }
-    }
+    },
   )
 }

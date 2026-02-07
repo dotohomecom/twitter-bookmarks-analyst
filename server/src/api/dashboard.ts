@@ -201,6 +201,11 @@ function getDashboardHtml(): string {
       border-color: rgba(255,173,31,0.35);
     }
 
+    .media-progress {
+      opacity: 0.85;
+      margin-left: 2px;
+    }
+
     .loading,
     .empty {
       text-align: center;
@@ -243,9 +248,37 @@ function getDashboardHtml(): string {
   </div>
 
   <script>
+    function getMediaProgress(bookmark) {
+      if (!Array.isArray(bookmark.mediaItems) || bookmark.mediaItems.length === 0) {
+        return null
+      }
+
+      const total = bookmark.mediaItems.length
+      const completed = bookmark.mediaItems.filter((item) => item.status === 'completed').length
+      const failed = bookmark.mediaItems.filter((item) => item.status === 'failed').length
+      const pending = Math.max(0, total - completed - failed)
+
+      return { total, completed, failed, pending }
+    }
+
     function getMediaIndicator(bookmark) {
       if (bookmark.mediaType === 'none') {
         return ''
+      }
+
+      const progress = getMediaProgress(bookmark)
+      if (progress) {
+        const ratio = '<span class="media-progress">(' + progress.completed + '/' + progress.total + ')</span>'
+
+        if (progress.failed > 0) {
+          return '<span class="media-indicator failed" title="Media download failed">&#x274C; Media Failed ' + ratio + '</span>'
+        }
+
+        if (progress.completed === progress.total) {
+          return '<span class="media-indicator completed" title="Media download completed">&#x2705; Media Done ' + ratio + '</span>'
+        }
+
+        return '<span class="media-indicator pending" title="Media is still downloading">&#x23F3; Media Pending ' + ratio + '</span>'
       }
 
       if (bookmark.mediaDownloadFailed) {

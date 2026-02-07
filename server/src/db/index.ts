@@ -70,13 +70,34 @@ function migrate(): void {
     )
   `)
 
-  ensureColumn('bookmarks', 'media_download_failed', "INTEGER DEFAULT 0")
+  // Create media items table (one row per media file)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS bookmark_media_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bookmark_id INTEGER NOT NULL,
+      media_kind TEXT NOT NULL,
+      source_url TEXT NOT NULL,
+      sequence_no INTEGER NOT NULL,
+      status TEXT DEFAULT 'pending',
+      local_path TEXT,
+      error_message TEXT,
+      retry_count INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+
+  ensureColumn('bookmarks', 'media_download_failed', 'INTEGER DEFAULT 0')
+  ensureColumn('bookmark_media_items', 'error_message', 'TEXT')
+  ensureColumn('bookmark_media_items', 'retry_count', 'INTEGER DEFAULT 0')
 
   // Create indexes
   db.run(`CREATE INDEX IF NOT EXISTS idx_bookmarks_tweet_id ON bookmarks(tweet_id)`)
   db.run(`CREATE INDEX IF NOT EXISTS idx_bookmarks_author_id ON bookmarks(author_id)`)
   db.run(`CREATE INDEX IF NOT EXISTS idx_bookmarks_status ON bookmarks(status)`)
   db.run(`CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON bookmarks(created_at)`)
+  db.run(`CREATE INDEX IF NOT EXISTS idx_media_items_bookmark_id ON bookmark_media_items(bookmark_id)`)
+  db.run(`CREATE INDEX IF NOT EXISTS idx_media_items_status ON bookmark_media_items(status)`)
 
   logger.info('Database migrations completed')
 }

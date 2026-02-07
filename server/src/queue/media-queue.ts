@@ -2,7 +2,11 @@
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
 import { downloadMedia } from '../services/media-downloader.js'
-import { updateBookmarkStatus, updateBookmarkMediaResult } from '../db/bookmarks.js'
+import {
+  replaceBookmarkMediaItems,
+  updateBookmarkMediaResult,
+  updateBookmarkStatus,
+} from '../db/bookmarks.js'
 
 export interface MediaDownloadJob {
   bookmarkId: number
@@ -72,6 +76,19 @@ async function processJob(job: MediaDownloadJob): Promise<void> {
       mediaUrls,
       mediaType,
     })
+
+    replaceBookmarkMediaItems(
+      bookmarkId,
+      downloadResult.mediaItems.map((item) => ({
+        mediaKind: item.mediaKind,
+        sourceUrl: item.sourceUrl,
+        sequenceNo: item.sequenceNo,
+        status: item.status,
+        localPath: item.localPath,
+        errorMessage: item.errorMessage,
+        retryCount: item.retryCount,
+      })),
+    )
 
     updateBookmarkMediaResult(bookmarkId, downloadResult.downloadedPaths, downloadResult.hasFailure)
 
