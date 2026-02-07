@@ -35,10 +35,11 @@ export async function browseMediaDirectory(): Promise<MediaDirectoryBrowseResult
       mediaDir: selectedPath,
     }
   } catch (error) {
-    logger.error({ error }, 'Failed to open Windows directory picker')
+    const err = error instanceof Error ? error : new Error(String(error))
+    logger.error({ err }, 'Failed to open Windows directory picker')
     return {
       success: false,
-      error: 'Failed to open directory picker. Ensure the server runs in an interactive desktop session.',
+      error: 'Failed to open directory picker: ' + err.message,
     }
   }
 }
@@ -50,7 +51,6 @@ function browseWindowsDirectory(): Promise<string | null> {
     '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
     "$dialog.Description = 'Select media directory'",
     '$dialog.ShowNewFolderButton = $true',
-    '$dialog.UseDescriptionForTitle = $true',
     '$result = $dialog.ShowDialog()',
     "if ($result -eq [System.Windows.Forms.DialogResult]::OK -and -not [string]::IsNullOrWhiteSpace($dialog.SelectedPath)) {",
     '  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
@@ -90,7 +90,8 @@ function browseWindowsDirectory(): Promise<string | null> {
 
     child.on('close', (code) => {
       if (code !== 0) {
-        const errorMessage = stderr.trim() || 'Directory picker process exited with code ' + code
+        const details = [stderr.trim(), stdout.trim()].filter((part) => part.length > 0).join(' | ')
+        const errorMessage = details || 'Directory picker process exited with code ' + code
         reject(new Error(errorMessage))
         return
       }
