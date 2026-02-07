@@ -60,7 +60,6 @@ async function checkAndInstallDeno(): Promise<boolean> {
       logger.info('Installing Deno on Windows...')
       execSync('powershell -Command "irm https://deno.land/install.ps1 | iex"', {
         stdio: 'inherit',
-        shell: true,
       })
     } else if (os === 'darwin') {
       // macOS: Use curl installer or Homebrew
@@ -71,7 +70,6 @@ async function checkAndInstallDeno(): Promise<boolean> {
         // Fallback to curl installer
         execSync('curl -fsSL https://deno.land/install.sh | sh', {
           stdio: 'inherit',
-          shell: true,
         })
       }
     } else {
@@ -79,7 +77,6 @@ async function checkAndInstallDeno(): Promise<boolean> {
       logger.info('Installing Deno on Linux...')
       execSync('curl -fsSL https://deno.land/install.sh | sh', {
         stdio: 'inherit',
-        shell: true,
       })
     }
 
