@@ -46,3 +46,6 @@ extension/*.pem
 tmp/
 temp/
 .cache/
+
+# Local work logs
+WORKLOG_*.md
