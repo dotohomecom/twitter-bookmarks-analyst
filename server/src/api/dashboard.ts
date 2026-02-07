@@ -402,7 +402,7 @@ function getDashboardHtml(): string {
               if (!mediaUrl) {
                 return ''
               }
-              return '<img src="' + mediaUrl + '" alt="Media" onerror="this.style.display=\'none\'">'
+              return '<img src="' + mediaUrl + '" alt="Media" onerror="this.style.display=&quot;none&quot;">'
             }).filter(Boolean).join('') + '</div>'
             : ''
 
