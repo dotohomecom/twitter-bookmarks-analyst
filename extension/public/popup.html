@@ -12,13 +12,15 @@
     .header h1 { font-size: 16px; font-weight: 600; color: #ffffff; }
     .section { margin-bottom: 20px; }
     .section-label { font-size: 13px; color: #8899a6; margin-bottom: 8px; display: block; }
-    .input-group { display: flex; gap: 8px; }
+    .input-group { display: flex; gap: 8px; align-items: stretch; }
     input[type="text"] { flex: 1; padding: 10px 12px; background: #253341; border: 1px solid #38444d; border-radius: 6px; color: #ffffff; font-size: 14px; outline: none; transition: border-color 0.2s; }
     input[type="text"]:focus { border-color: #1da1f2; }
     input[type="text"]::placeholder { color: #6e767d; }
-    .btn { padding: 10px 16px; background: #1da1f2; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.2s; }
+    .btn { padding: 10px 14px; background: #1da1f2; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
     .btn:hover { background: #1a91da; }
     .btn:disabled { background: #38444d; cursor: not-allowed; }
+    .btn-secondary { background: #38444d; }
+    .btn-secondary:hover { background: #455560; }
     .status-section { background: #253341; border-radius: 8px; padding: 12px; }
     .status-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
     .status-row:not(:last-child) { border-bottom: 1px solid #38444d; }
@@ -30,6 +32,7 @@
     .message { margin-top: 12px; padding: 10px 12px; border-radius: 6px; font-size: 13px; display: none; }
     .message.success { display: block; background: rgba(23, 191, 99, 0.15); color: #17bf63; border: 1px solid rgba(23, 191, 99, 0.3); }
     .message.error { display: block; background: rgba(224, 36, 94, 0.15); color: #e0245e; border: 1px solid rgba(224, 36, 94, 0.3); }
+    .message.info { display: block; background: rgba(29, 161, 242, 0.15); color: #7dc9ff; border: 1px solid rgba(29, 161, 242, 0.3); }
     .hint { font-size: 12px; color: #6e767d; margin-top: 8px; }
   </style>
 </head>
@@ -38,28 +41,32 @@
     <img src="icon.svg" alt="Icon" class="header-icon">
     <h1>Twitter Bookmarks</h1>
   </div>
+
   <div class="section">
-    <label class="section-label">媒体存储路径</label>
+    <label class="section-label">Media Storage Path</label>
     <div class="input-group">
       <input type="text" id="mediaDir" placeholder="D:\media">
-      <button class="btn" id="saveBtn">保存</button>
+      <button class="btn btn-secondary" id="browseBtn">Browse</button>
+      <button class="btn" id="saveBtn">Save</button>
     </div>
-    <p class="hint">文件将按日期分目录存储，如：D:\media\2026-02-06\</p>
+    <p class="hint">Files are stored by date, for example: D:\media\2026-02-06\</p>
   </div>
+
   <div class="section status-section">
     <div class="status-row">
-      <span class="status-label">服务器状态</span>
-      <span class="status-value" id="serverStatus">检查中...</span>
+      <span class="status-label">Server Status</span>
+      <span class="status-value" id="serverStatus">Checking...</span>
     </div>
     <div class="status-row">
-      <span class="status-label">今日保存</span>
+      <span class="status-label">Saved Today</span>
       <span class="status-value status-count" id="todayCount">-</span>
     </div>
     <div class="status-row">
-      <span class="status-label">总书签数</span>
+      <span class="status-label">Total Bookmarks</span>
       <span class="status-value status-count" id="totalCount">-</span>
     </div>
   </div>
+
   <div class="message" id="message"></div>
   <script src="popup.js"></script>
 </body>

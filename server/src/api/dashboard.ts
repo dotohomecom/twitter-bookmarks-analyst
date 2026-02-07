@@ -292,34 +292,96 @@ function getDashboardHtml(): string {
       return '<span class="media-indicator pending" title="Media is still downloading">&#x23F3; Media Pending</span>'
     }
 
+    function extractFileName(pathValue) {
+      const value = String(pathValue || '')
+      if (!value) {
+        return ''
+      }
+
+      const slashIndex = value.lastIndexOf('/')
+      const backslashIndex = value.lastIndexOf(String.fromCharCode(92))
+      const separatorIndex = Math.max(slashIndex, backslashIndex)
+
+      if (separatorIndex === -1) {
+        return value
+      }
+
+      return value.slice(separatorIndex + 1)
+    }
+
+    function extractDatePart(dateValue) {
+      const value = String(dateValue || '').trim()
+      if (!value) {
+        return ''
+      }
+
+      if (value.includes('T')) {
+        return value.split('T')[0]
+      }
+
+      if (value.includes(' ')) {
+        return value.split(' ')[0]
+      }
+
+      return value.length >= 10 ? value.slice(0, 10) : ''
+    }
+
     function toMediaUrl(path, bookmarkTime) {
-      const fileName = String(path || '').split(/[/\\]/).pop()
-      const datePart = (bookmarkTime || '').split('T')[0]
+      const fileName = extractFileName(path)
+      const datePart = extractDatePart(bookmarkTime)
 
       if (!fileName || !datePart) {
         return ''
       }
 
-      return '/media/' + datePart + '/' + fileName
+      return '/media/' + encodeURIComponent(datePart) + '/' + encodeURIComponent(fileName)
+    }
+
+    function renderLoadError(message) {
+      const container = document.getElementById('bookmarks')
+      container.innerHTML = '<div class="empty">Failed to load bookmarks: ' + message + '</div>'
     }
 
     async function loadBookmarks() {
       try {
-        const response = await fetch('/api/bookmarks?limit=50')
-        const data = await response.json()
+        const response = await fetch('/api/bookmarks?limit=50', {
+          headers: {
+            Accept: 'application/json',
+          },
+        })
 
-        if (!data.success) throw new Error(data.error)
+        if (!response.ok) {
+          throw new Error('Request failed with status ' + response.status)
+        }
 
-        document.getElementById('totalCount').textContent = data.pagination.total
+        let data
+        try {
+          data = await response.json()
+        } catch (_parseError) {
+          throw new Error('Invalid JSON response from server')
+        }
 
-        const bookmarks = data.data
+        if (!data || data.success !== true) {
+          throw new Error((data && data.error) || 'Unexpected API response')
+        }
+
+        const bookmarks = Array.isArray(data.data) ? data.data : null
+        if (!bookmarks) {
+          throw new Error('Bookmarks payload is missing')
+        }
+
+        const total = data.pagination && typeof data.pagination.total === 'number'
+          ? data.pagination.total
+          : bookmarks.length
+        document.getElementById('totalCount').textContent = String(total)
+
         const completed = bookmarks.filter((b) => b.status === 'completed' && !b.mediaDownloadFailed).length
         const failed = bookmarks.filter((b) => b.mediaDownloadFailed).length
         const pending = bookmarks.filter((b) => b.status === 'pending' || b.status === 'downloading').length
 
-        document.getElementById('completedCount').textContent = completed
-        document.getElementById('failedCount').textContent = failed
-        document.getElementById('pendingCount').textContent = pending
+        document.getElementById('completedCount').textContent = String(completed)
+        document.getElementById('failedCount').textContent = String(failed)
+        document.getElementById('pendingCount').textContent = String(pending)
 
         const container = document.getElementById('bookmarks')
 
@@ -332,15 +394,16 @@ function getDashboardHtml(): string {
           const authorName = bookmark.authorName || 'Unknown'
           const avatar = authorName.charAt(0).toUpperCase()
           const mediaIndicator = getMediaIndicator(bookmark)
+          const mediaPaths = Array.isArray(bookmark.mediaPaths) ? bookmark.mediaPaths : []
 
-          const mediaHtml = bookmark.mediaType !== 'none'
-            ? '<div class="bookmark-media">' + bookmark.mediaPaths.slice(0, 4).map((path) => {
+          const mediaHtml = bookmark.mediaType !== 'none' && mediaPaths.length > 0
+            ? '<div class="bookmark-media">' + mediaPaths.slice(0, 4).map((path) => {
               const mediaUrl = toMediaUrl(path, bookmark.bookmarkTime)
               if (!mediaUrl) {
                 return ''
               }
               return '<img src="' + mediaUrl + '" alt="Media" onerror="this.style.display=\'none\'">'
-            }).join('') + '</div>'
+            }).filter(Boolean).join('') + '</div>'
             : ''
 
           return '<div class="bookmark-card">' +
@@ -363,11 +426,10 @@ function getDashboardHtml(): string {
           '</div>'
         }).join('')
       } catch (error) {
-        document.getElementById('bookmarks').innerHTML =
-          '<div class="empty">Failed to load bookmarks: ' + error.message + '</div>'
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        renderLoadError(message)
       }
     }
-
     loadBookmarks()
     setInterval(loadBookmarks, 30000) // Refresh every 30s
   </script>
@@ -375,3 +437,4 @@ function getDashboardHtml(): string {
 </html>
 `
 }
+
