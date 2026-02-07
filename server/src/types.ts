@@ -13,6 +13,7 @@ export interface Bookmark {
   mediaType: 'none' | 'image' | 'video' | 'gif' | 'mixed'
   mediaUrls: string[]
   mediaPaths: string[]
+  mediaDownloadFailed: boolean
   quotedTweetUrl?: string
   status: BookmarkStatus
   bookmarkTime: string

@@ -24,7 +24,7 @@ export async function initDatabase(): Promise<void> {
 
   // Initialize sql.js
   const SQL = await initSqlJs()
-  
+
   // Load existing database or create new one
   if (existsSync(config.dbPath)) {
     const fileBuffer = readFileSync(config.dbPath)
@@ -37,14 +37,14 @@ export async function initDatabase(): Promise<void> {
 
   // Run migrations
   migrate()
-  
+
   // Save database
   saveDatabase()
 }
 
 function migrate(): void {
   if (!db) return
-  
+
   logger.info('Running database migrations...')
 
   // Create bookmarks table
@@ -60,6 +60,7 @@ function migrate(): void {
       media_type TEXT DEFAULT 'none',
       media_urls TEXT,
       media_paths TEXT,
+      media_download_failed INTEGER DEFAULT 0,
       quoted_tweet_url TEXT,
       status TEXT DEFAULT 'pending',
       bookmark_time TEXT,
@@ -68,6 +69,8 @@ function migrate(): void {
       updated_at TEXT DEFAULT (datetime('now'))
     )
   `)
+
+  ensureColumn('bookmarks', 'media_download_failed', "INTEGER DEFAULT 0")
 
   // Create indexes
   db.run(`CREATE INDEX IF NOT EXISTS idx_bookmarks_tweet_id ON bookmarks(tweet_id)`)
@@ -78,9 +81,36 @@ function migrate(): void {
   logger.info('Database migrations completed')
 }
 
+function ensureColumn(tableName: string, columnName: string, definition: string): void {
+  if (!db || hasColumn(tableName, columnName)) {
+    return
+  }
+
+  db.run(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`)
+  logger.info(`Added column ${columnName} to ${tableName}`)
+}
+
+function hasColumn(tableName: string, columnName: string): boolean {
+  if (!db) {
+    return false
+  }
+
+  const result = db.exec(`PRAGMA table_info(${tableName})`)
+  if (result.length === 0) {
+    return false
+  }
+
+  const nameIndex = result[0].columns.indexOf('name')
+  if (nameIndex === -1) {
+    return false
+  }
+
+  return result[0].values.some((row: unknown[]) => row[nameIndex] === columnName)
+}
+
 export function saveDatabase(): void {
   if (!db) return
-  
+
   const data = db.export()
   const buffer = Buffer.from(data)
   writeFileSync(config.dbPath, buffer)
